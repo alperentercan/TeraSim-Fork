@@ -392,7 +392,7 @@ class CarlaCosimPlugin(object):
 
 
 def main():
-    carla_cosim_plugin = CarlaCosimPlugin()
+    carla_cosim_plugin = CarlaCosimPlugin(control_cav=False)
     step_length = 0.04
 
     settings = carla_cosim_plugin.world.get_settings()
