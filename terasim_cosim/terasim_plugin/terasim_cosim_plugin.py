@@ -85,6 +85,7 @@ class TeraSimCoSimPlugin:
         if self.control_cav:
             self.sync_terasim_cav_to_cosim()
         else:
+            print("Sync CAV from Cosim to Terasim")
             self.sync_cosim_cav_to_terasim()
 
         self.ped_list = traci.person.getIDList()
@@ -215,6 +216,7 @@ class TeraSimCoSimPlugin:
     def sync_cosim_cav_to_terasim(self):
         try:
             cav_info = self.redis_client.get(CAV_INFO)
+            print("I got the CAV info")
         except:
             print("cav_info not available. Exiting...")
             return

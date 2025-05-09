@@ -13,6 +13,7 @@ from terasim_cosim.terasim_plugin.utils import (
 from terasim_cosim.terasim_plugin.utils import sumo_to_utm_coordinate, utm_to_sumo_coordinate
 # from av_decision_making_module.ozay_module.controller import Controller, DynamicBicycleModel
 from cav_utils import *
+from models.bicycle_dynamics import BicycleDynamics
 from controller import Controller
 
 def set_cav_info(redis_client, current_states, dt):
@@ -104,7 +105,7 @@ def main():
     
     redis_client = initialize_cav(utm_init_states, dt)
 
-    model = Dynamics(vehicle_params =None,
+    model = BicycleDynamics(vehicle_params =None,
                     init_states=initial_states,
                     dt = dt, 
                     integrator='hybrid')

@@ -50,7 +50,7 @@ sim = Simulator(
     realtime_flag=True,
     additional_sumo_args=["--start", "--quit-on-end"],
 )
-
+print("CAV is not Terasim controlled")
 # Vehicle Co-simulation
 sim.add_plugin(
     TeraSimCoSimPlugin(

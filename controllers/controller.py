@@ -10,8 +10,8 @@ import numpy as np
 from scipy.io import loadmat
 from pathlib import Path
 import cvxpy as cp
-from control_utils import two_point_distance, wrap_angle
-from cav_utils import *
+from controllers.control_utils import two_point_distance, wrap_angle
+from controllers.cav_utils import *
 import math 
 
 CWD = str(Path(__file__).parent)
