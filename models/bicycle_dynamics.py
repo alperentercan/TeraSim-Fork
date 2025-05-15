@@ -3,9 +3,28 @@ from  controllers.cav_utils import *
 class BicycleDynamics:
     def __init__(self, vehicle_params, init_states, dt, integrator='hybrid'):
         self.v = Vehicle(vehicle_params)
-        self.states = init_states
+        # state = init_states
         self.dt = dt
         self.integrator = integrator
+
+    def next_state(self, current_state, control):
+        acc, steer = control['throttle_cmd'], control['steering_cmd']
+        # Vehicle dynamics equations
+        if self.integrator == 'rk4':
+            update_step = self.update_rk4(current_state, acc, steer)
+        elif self.integrator == 'implicit':
+            update_step = self.update_implicit(current_state, acc, steer)
+        elif self.integrator == 'hybrid':
+            if current_state.v_long > 6:
+                update_step = self.update_rk4(current_state, acc, steer)
+            else:
+                update_step = self.update_implicit(current_state, acc, steer)
+        else:
+            print("Unknown integrator")
+            raise RuntimeError
+        
+        new_state = current_state + self.dt*update_step
+        return new_state
 
     def derivative(self, states, acc, steer):
         '''
@@ -68,52 +87,18 @@ class BicycleDynamics:
             states.theta_dot, 
             theta_dotdot
             ])
-    
-    def set_current_state(self, derivatives):
-        # x = self.states.x + self.dt*derivatives[0]
-        # y = self.states.y + self.dt*derivatives[1]
-        # v_long = self.states.v_long + self.dt*derivatives[2]
-        # v_lat = self.states.v_lat + self.dt*derivatives[3]
-        # theta = self.states.theta + self.dt*derivatives[4]
-        # theta_dot = self.states.theta_dot + self.dt * derivatives[5]
 
-        new_state = self.states + self.dt*derivatives
-        # return State(x = x,
-        #              y= y,
-        #              v_long = v_long, 
-        #              v_lat = v_lat, 
-        #              theta= theta,
-        #              theta_dot = theta_dot)
-        return new_state
-
-    def update_states(self, acc, steer):
-        # Vehicle dynamics equations
-        if self.integrator == 'rk4':
-            update_step = self.update_rk4(acc, steer)
-        elif self.integrator == 'implicit':
-            update_step = self.update_implicit(acc, steer)
-        elif self.integrator == 'hybrid':
-            if self.states.v_long > 6:
-                update_step = self.update_rk4(acc, steer)
-            else:
-                update_step = self.update_implicit(acc, steer)
-        else:
-            print("Unknown integrator")
-            raise RuntimeError
-        
-        current_state = self.set_current_state(update_step)
-        return current_state
     
-    def update_rk4(self, acc, steer):
+    def update_rk4(self, state, acc, steer):
         # Update vehicle states
-        k1 = self.derivative(self.states, acc, steer)
-        k2 = self.derivative(self.states+k1*self.dt/2, acc, steer)
-        k3 = self.derivative(self.states+k2*self.dt/2, acc, steer)
-        k4 = self.derivative(self.states+k3*self.dt, acc, steer)
+        k1 = self.derivative(state, acc, steer)
+        k2 = self.derivative(state+k1*self.dt/2, acc, steer)
+        k3 = self.derivative(state+k2*self.dt/2, acc, steer)
+        k4 = self.derivative(state+k3*self.dt, acc, steer)
 
         return (1/6*k1 + 1/3*k2 + 1/3*k3 + 1/6*k4)
 
-    def update_implicit(self, acc, steer):
+    def update_implicit(self, state, acc, steer):
         # Update the states based on the implicit Euler equation in arvix.org/pdf/2011.09612.pdf
         # x, y, v_lon, v_lat, yaw, r = self.x, self.y, self.v_lon, self.v_lat, self.yaw, self.r
         # print(f"Pre-update: {x=}, {y=}, {v_lon=}, {v_lat=}, {yaw=}, {r=}, {a=}, {delta=}{bcolors.ENDC}")
@@ -124,5 +109,67 @@ class BicycleDynamics:
         # self.v_lat = (self.mass*v_lon*v_lat + self.dt*(self.lf*self.Cf - self.lr*self.Cr)*r - self.dt*self.Cf*delta*v_lon-self.dt*self.mass*v_lon**2*r)/(self.mass*v_lon - self.dt*(self.Cf+self.Cr))
         # self.r = (self.Iz*v_lon*r + self.dt*(self.lf*self.Cf - self.lr*self.Cr)*v_lat - self.dt*self.lf*self.Cf*delta*v_lon)/(self.Iz*v_lon-self.dt*(self.lf**2*self.Cf + self.lr**2*self.Cr))
         # print(f"Post update: {self.x=}, {self.y=}, {self.v_lon=}, {self.v_lat=}, {self.yaw=}, {self.r=}{bcolors.ENDC}")
-        return self.derivative(self.states, acc, steer)
+        return self.derivative(state, acc, steer)
 
+
+
+class State():
+    def __init__(
+            self, 
+            x:float = 0, 
+            y:float = 0, 
+            z:float = 0,
+            v_long:float = 0, 
+            v_lat:float = 0, 
+            theta:float = 0, 
+            theta_dot:float = 0):
+        
+        self.x = x
+        self.y = y
+        self.z = z
+        self.v_long = v_long
+        self.v_lat = v_lat
+        self.theta = theta
+        self.theta_dot = theta_dot
+
+    def get_state(self)->np.ndarray:
+        return np.array([self.x, 
+                        self.y, 
+                        self.v_long, 
+                        self.v_lat, 
+                        self.theta,
+                        self.theta_dot])
+
+    def set_state(
+            self,
+            **kwargs):
+        self.x = kwargs.get('x', self.x)
+        self.y = kwargs.get('y', self.y)
+        self.z = kwargs.get('z', self.z)
+        self.v_long = kwargs.get('v_long', self.v_long)
+        self.v_lat = kwargs.get('v_lat', self.v_lat)
+        self.theta = kwargs.get('theta', self.theta)
+        self.theta_dot = kwargs.get('theta_dot', self.theta_dot)
+
+        return self
+    
+    def __add__(self, other):
+        if isinstance(other, self.__class__):
+            x = self.x + other.x
+            y = self.y + other.y
+            v_long = self.v_long + other.v_long
+            v_lat = self.v_lat + other.v_lat
+            theta = self.theta + other.theta
+            theta_dot = self.theta_dot + other.theta_dot
+        elif isinstance(other, np.ndarray):
+            assert other.shape[0] == 6
+            x = self.x + other[0]
+            y = self.y + other[1]
+            v_long = self.v_long + other[2]
+            v_lat = self.v_lat + other[3]
+            theta = self.theta + other[4]
+            theta_dot = self.theta_dot + other[5]
+        else: 
+            raise TypeError("Unsupported operand type(s) for +: '{}' and '{}'").format(self.__class__, type(other))
+        
+        return State(x = x, y = y, v_long= v_long, v_lat=v_lat, theta=theta, theta_dot=theta_dot)
