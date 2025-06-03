@@ -4,7 +4,7 @@ from terasim_cosim.terasim_plugin.utils import sumo_to_utm_coordinate, utm_to_su
 class Vehicle:
     def __init__(self, vehicle_parameters:dict=None):
         if vehicle_parameters == None:
-            self.mass = 1650.0
+            self.mass = 1625.0
             self.Iz = 2315.0
             self.lr = 1.59
             self.lf = 1.11
@@ -31,7 +31,8 @@ class State():
             v_long:float = 0, 
             v_lat:float = 0, 
             theta:float = 0, 
-            theta_dot:float = 0):
+            theta_dot:float = 0,
+            cr = 0):
         
         self.x = x
         self.y = y
@@ -40,6 +41,7 @@ class State():
         self.v_lat = v_lat
         self.theta = theta
         self.theta_dot = theta_dot
+        self.cr = cr  # curvature rate, can be used for path following
 
     def get_state(self)->np.ndarray:
         return np.array([self.x, 
@@ -62,6 +64,9 @@ class State():
 
         return self
     
+    def set_cr(self,cr):
+        self.cr = cr
+   
     def __add__(self, other):
         if isinstance(other, self.__class__):
             x = self.x + other.x

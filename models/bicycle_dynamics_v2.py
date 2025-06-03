@@ -1,4 +1,5 @@
 from  controllers.src.cav_utils import *
+import math
 
 class BicycleDynamics:
     def __init__(self, vehicle_params, init_states, dt, integrator='hybrid'):
@@ -36,17 +37,20 @@ class BicycleDynamics:
         # necessary computations
         
         # front slip angle
-        alpha_f = (
-            steer 
-            - np.arctan(states.v_lat + self.v.lf * states.theta_dot)
-                        / (states.v_long + 1e-10)
-                ) 
+        theta_f = (
+            math.atan((states.v_lat)/ (states.v_long + 1e-10)) 
+            + (self.v.lf * states.theta_dot) / (states.v_long + 1e-10)
+        )
+             # to avoid zero div
+
+        alpha_f = steer - theta_f
+
         # rear slip angle
-        alpha_r = - np.arctan(
-            (states.v_lat - self.v.lr * states.theta_dot)
-              / (states.v_long + 1e-10)
-            )  
-        
+        theta_r = (
+            math.atan((states.v_lat)/ (states.v_long + 1e-10)) 
+            - (self.v.lr * states.theta_dot) / (states.v_long + 1e-10)
+        )
+        alpha_r = - theta_r
         # lateral force at front tire
         Fyf = self.v.Cf * alpha_f  
 
@@ -55,52 +59,50 @@ class BicycleDynamics:
 
         # Calculate derivative components
         # longitudinal speed
-        x_dot = (
-            states.v_long*np.cos(states.theta) 
-            - states.v_lat*np.sin(states.theta)
-            )
+        x_dot = states.v_long
+        # x_dot = (
+        #     states.v_long*np.cos(states.theta) 
+        #     - states.v_lat*np.sin(states.theta)
+        #     )
         
         # lateral speed
-        y_dot = (
-            states.v_long*np.sin(states.theta) 
-            + states.v_lat*np.cos(states.theta)
-            )
+        y_dot =states.v_lat
+        
+        # (
+        #     states.v_long*np.sin(states.theta) 
+        #     + states.v_lat*np.cos(states.theta)
+        #     )
         
         # longitudinal acceleration -- assuming small steering
-        v_long_dot = ( acc +
-            - self.v.f1/self.v.mass*states.v_long 
-            - self.v.f0/self.v.mass 
-            + states.v_lat*states.theta_dot 
-            )
+        v_long_dot = acc
+        #     - self.v.f1/self.v.mass*states.v_long 
+        #     - self.v.f0/self.v.mass + acc + states.v_lat*states.theta_dot 
+        #     )
         
         #  lateral acceleration
-        v_lat_dot = (
-            (Fyf*np.cos(steer) + Fyr) / self.v.mass  
-            - states.v_long*states.theta_dot
-            )
+        v_lat_dot = ((Fyf + Fyr) / self.v.mass)
+        
+        # v_lat_dot = ((Fyf + Fyr) / self.v.mass  
+        #     - states.v_long*states.theta_dot
+        #     )
         
         # rotational acceleration
-        theta_dotdot = (self.v.lf*Fyf*np.cos(steer) - self.v.lr*Fyr)/self.v.Iz
-       
-        # theta_dot = states.theta_dot - states.cr
-        print(f"states.theta_dot: {states.theta_dot}, states.cr: {states.cr}")
-        theta_dot = states.theta_dot - states.cr
+        # theta_dotdot = (self.v.lf*Fyf*np.cos(steer) - self.v.lr*Fyr)/self.v.Iz
+        theta_dotdot = (self.v.lf*Fyf - self.v.lr*Fyr)/self.v.Iz
         
         return np.array([
             x_dot, 
             y_dot, 
             v_long_dot, 
             v_lat_dot, 
-            theta_dot, 
+            states.theta_dot, 
             theta_dotdot
             ])
 
     
     def update_rk4(self, state, acc, steer):
         # Update vehicle states
-        print(f"Pre-update: {state.cr}")
         k1 = self.derivative(state, acc, steer)
-        print(k1)
         k2 = self.derivative(state+k1*self.dt/2, acc, steer)
         k3 = self.derivative(state+k2*self.dt/2, acc, steer)
         k4 = self.derivative(state+k3*self.dt, acc, steer)
@@ -131,8 +133,7 @@ class State():
             v_long:float = 0, 
             v_lat:float = 0, 
             theta:float = 0, 
-            theta_dot:float = 0,
-            cr:float=0):
+            theta_dot:float = 0):
         
         self.x = x
         self.y = y
@@ -141,7 +142,6 @@ class State():
         self.v_lat = v_lat
         self.theta = theta
         self.theta_dot = theta_dot
-        self.cr = cr  # curvature rate
 
     def get_state(self)->np.ndarray:
         return np.array([self.x, 
@@ -172,7 +172,6 @@ class State():
             v_lat = self.v_lat + other.v_lat
             theta = self.theta + other.theta
             theta_dot = self.theta_dot + other.theta_dot
-            cr = cr
         elif isinstance(other, np.ndarray):
             assert other.shape[0] == 6
             x = self.x + other[0]
@@ -181,8 +180,7 @@ class State():
             v_lat = self.v_lat + other[3]
             theta = self.theta + other[4]
             theta_dot = self.theta_dot + other[5]
-            cr = cr
         else: 
             raise TypeError("Unsupported operand type(s) for +: '{}' and '{}'").format(self.__class__, type(other))
         
-        return State(x = x, y = y, v_long= v_long, v_lat=v_lat, theta=theta, theta_dot=theta_dot, cr = cr)
+        return State(x = x, y = y, v_long= v_long, v_lat=v_lat, theta=theta, theta_dot=theta_dot)

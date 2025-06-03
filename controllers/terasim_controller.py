@@ -1,5 +1,6 @@
 import time
 import numpy as np
+import math
 import terasim_cosim.redis_msgs as redis_msgs
 
 from terasim_cosim.constants import *
@@ -7,7 +8,8 @@ from terasim_cosim.redis_client_wrapper import create_redis_client
 
 from terasim_cosim.terasim_plugin.utils import sumo_to_utm_coordinate, utm_to_sumo_coordinate
 # from av_decision_making_module.ozay_module.controller import Controller, DynamicBicycleModel
-from controllers.cav_utils import *
+from controllers.src.cav_utils import *
+# from models.bicycle_dynamics_v2 import BicycleDynamics
 from models.bicycle_dynamics import BicycleDynamics
 from controllers.controller import Controller
 from terasim_cosim.terasim_plugin.utils import (
@@ -32,6 +34,7 @@ def set_cav_info(redis_client, current_states, dt):
     cav.z = current_states.z
     cav.orientation = current_states.theta
     cav.speed_long = current_states.v_long
+    # cav.speed_lat = current_states.v_lat
 
     # Add cav to cav_cosim_vehicle_info
     cav_cosim_vehicle_info.data["CAV"] = cav
@@ -80,7 +83,7 @@ def initialize_cav(init_states, dt):
 
 def main():
     # vehicle_params = './data/vehicle_params.csv'
-    route_file = "controllers/highway_scenario/route.csv"
+    route_file = "controllers/full_scenario/route.csv"
     with open(route_file, "r") as f:
         f.readline()
         waypts = [(float(line.split(',')[0]), float(line.split(',')[1])) for line in f.readlines()]
@@ -89,7 +92,7 @@ def main():
     x_init = waypts[0][0]
     y_init = waypts[0][1]
     z_init = 0
-    theta_init = np.pi/2
+    theta_init = math.atan2(waypts[1][1] - waypts[0][1], waypts[1][0] - waypts[0][0])
     v_init = 0
 
     initial_states = State(
@@ -109,7 +112,7 @@ def main():
                     dt = dt, 
                     integrator='hybrid')
     
-    controller = Controller(waypts)
+    controller = Controller(waypts, dt=dt)
     counter = 1
 
     while counter < len(waypts):
@@ -135,12 +138,13 @@ def main():
                 x=cav.x, 
                 y=cav.y, 
                 theta = cav.orientation,
-                v_long = cav.speed_long)
+                v_long = cav.speed_long,
+                )
 
             current_state = utm_states_to_sumo_states(cav_state)
 
             model.states = current_state
-            acc, steer = controller.compute_control(current_state, bvs)
+            acc, steer, cr = controller.compute_control(current_state, bvs)
 
             # brake = -min(0, acc)/7.06
             # throttle = max(0, acc)/2.87
@@ -152,15 +156,21 @@ def main():
             # send_user_av_control_wrapper(brake, throttle, steer, 0)
 
             #  for i in range(20):
-            current_state= model.update_states(acc, steer)
-            utm_current_state = sumo_states_to_utm_states(current_state)
+            current_state.set_cr(cr)
+            print('cr set!', current_state.cr)
+            next_state= model.next_state(current_state, (acc, steer))
+            utm_next_state = sumo_states_to_utm_states(next_state)
             
-            print(f"{round(100*counter/len(waypts),1)} completed", 
-                "UTM", utm_current_state.x, utm_current_state.y, utm_current_state.v_long, 
-                "SUMO", current_state.x, current_state.y, current_state.v_long
+            print(f"{round(100*counter/len(waypts),1)}% completed\n", 
+                "x:", current_state.x, "->", next_state.x, "\n", 
+                "y:", current_state.y, " ->", next_state.y, "\n",
+                "vx:", current_state.v_long, "->", next_state.v_long,"\n",
+                "vy:", current_state.v_lat, "->", next_state.v_lat, "\n",
+                "th:", current_state.theta, "->", next_state.theta, "\n",
+                "dth:", current_state.theta_dot, "->", next_state.theta_dot, "\n"
                 )
  
-            set_cav_info(redis_client, utm_current_state, dt)
+            set_cav_info(redis_client, utm_next_state, dt)
             counter = controller.get_waypoint_id()
 
 
